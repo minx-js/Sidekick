@@ -1,0 +1,11 @@
+gradio>=6.0
+langchain>=1.0
+langchain-openai
+langchain-community
+langchain-mcp-adapters
+langgraph
+python-dotenv
+pydantic
+requests
+wikipedia
+python-pptx
