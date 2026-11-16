@@ -1,10 +1,12 @@
 """Gradio app for the Sidekick. Run with: uv run app.py"""
 
+import asyncio
 import html
 import os
 
 import gradio as gr
 
+import auth
 import styles
 from sidekick import Sidekick
 
@@ -30,10 +32,24 @@ def render_todos(todos):
     return f"<h3>Plan</h3>{items}"
 
 
-async def setup():
-    sidekick = Sidekick()
-    await sidekick.setup()
-    return sidekick, gr.update(interactive=True)
+async def login(username, password):
+    """The Sidekick (and its browser) only starts after a successful login."""
+    if not await asyncio.to_thread(auth.verify_user, username, password):
+        await asyncio.sleep(1)  # slow down password guessing
+        return None, gr.update(), gr.update(), "Wrong username or password.", gr.update()
+    new_sidekick = Sidekick()
+    await new_sidekick.setup()
+    return new_sidekick, gr.update(visible=False), gr.update(visible=True), "", gr.update(interactive=True)
+
+
+async def register(username, password, confirm, code):
+    return await asyncio.to_thread(auth.register_user, username, password, confirm, code)
+
+
+def logout(sidekick):
+    if sidekick:
+        sidekick.cleanup()
+    return None, gr.update(visible=True), gr.update(visible=False), gr.update(interactive=False)
 
 
 async def process_message(sidekick, message, success_criteria, history):
@@ -72,23 +88,44 @@ with gr.Blocks(title="Sidekick") as ui:
     gr.HTML(HEADER)
     sidekick = gr.State(delete_callback=free_resources)
 
-    with gr.Row():
-        chatbot = gr.Chatbot(label="Sidekick", height=320, scale=3, elem_id="chat")
-        with gr.Column(scale=1):
-            todos_panel = gr.HTML(render_todos([]), elem_id="plan-panel")
-    with gr.Group(elem_id="ask-panel"):
+    with gr.Column(visible=True) as login_panel:
+        with gr.Tabs():
+            with gr.Tab("Log in"):
+                login_user = gr.Textbox(label="Username")
+                login_pass = gr.Textbox(label="Password", type="password")
+                login_button = gr.Button("Log in", variant="primary")
+                login_message = gr.Markdown()
+            with gr.Tab("Register"):
+                reg_user = gr.Textbox(label="Choose a username")
+                reg_pass = gr.Textbox(label="Choose a password (8+ characters)", type="password")
+                reg_confirm = gr.Textbox(label="Repeat the password", type="password")
+                reg_code = gr.Textbox(label="Invite code", type="password")
+                reg_button = gr.Button("Create account", variant="primary")
+                reg_message = gr.Markdown()
+
+    with gr.Column(visible=False) as app_panel:
         with gr.Row():
-            message = gr.Textbox(show_label=False, placeholder="Your request to the Sidekick")
+            chatbot = gr.Chatbot(label="Sidekick", height=320, scale=3, elem_id="chat")
+            with gr.Column(scale=1):
+                todos_panel = gr.HTML(render_todos([]), elem_id="plan-panel")
+        with gr.Group(elem_id="ask-panel"):
+            with gr.Row():
+                message = gr.Textbox(show_label=False, placeholder="Your request to the Sidekick")
+            with gr.Row():
+                success_criteria = gr.Textbox(show_label=False, placeholder="What are your success criteria?")
         with gr.Row():
-            success_criteria = gr.Textbox(show_label=False, placeholder="What are your success criteria?")
-    with gr.Row():
-        reset_button = gr.Button("Reset", elem_id="reset-button")
-        approve_button = gr.Button("Approve and continue", visible=False, elem_id="approve-button")
-        go_button = gr.Button("Go!", elem_id="go-button", interactive=False)
+            reset_button = gr.Button("Reset", elem_id="reset-button")
+            approve_button = gr.Button("Approve and continue", visible=False, elem_id="approve-button")
+            go_button = gr.Button("Go!", elem_id="go-button", interactive=False)
+            logout_button = gr.Button("Log out")
 
     timer = gr.Timer(1)
 
-    ui.load(setup, [], [sidekick, go_button])
+    login_button.click(login, [login_user, login_pass], [sidekick, login_panel, app_panel, login_message, go_button])
+    login_pass.submit(login, [login_user, login_pass], [sidekick, login_panel, app_panel, login_message, go_button])
+    reg_button.click(register, [reg_user, reg_pass, reg_confirm, reg_code], [reg_message])
+    logout_button.click(logout, [sidekick], [sidekick, login_panel, app_panel, go_button])
+
     timer.tick(watch_todos, [sidekick], [todos_panel], show_progress="hidden")
     message.submit(process_message, [sidekick, message, success_criteria, chatbot],
                    [chatbot, approve_button, sidekick])
@@ -102,13 +139,11 @@ with gr.Blocks(title="Sidekick") as ui:
 
 if __name__ == "__main__":
     # On Render, PORT is set for you and the app must listen on 0.0.0.0.
-    # If APP_PASSWORD is set, the app asks for a login (username: admin).
-    password = os.environ.get("APP_PASSWORD")
+    # Users log in (or register with the invite code) inside the app itself.
     on_render = "PORT" in os.environ
     ui.launch(
         server_name="0.0.0.0" if on_render else "127.0.0.1",
         server_port=int(os.environ.get("PORT", 7860)),
         inbrowser=not on_render,
-        auth=("admin", password) if password else None,
         **LAUNCH_STYLE,
     )
