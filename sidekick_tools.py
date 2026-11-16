@@ -15,6 +15,9 @@ from langchain_mcp_adapters.tools import load_mcp_tools
 
 load_dotenv(override=True)
 
+# On Render, PORT is set. There is no screen there, so the browser must run headless.
+ON_RENDER = "PORT" in os.environ
+
 # Wikimedia rejects the wikipedia library's default user agent, so identify ourselves properly
 wikipedia.set_user_agent("agentic-track-course (https://edwarddonner.com)")
 
@@ -43,12 +46,16 @@ def request_human_help(instructions: str) -> str:
 
 
 def mcp_connections(sandbox: str) -> dict:
-    """The MCP servers the Sidekick uses: a headed browser and a sandbox filesystem."""
+    """The MCP servers the Sidekick uses: a browser and a sandbox filesystem."""
+    if ON_RENDER:
+        playwright_args = ["@playwright/mcp", "--isolated", "--headless", "--no-sandbox", "--browser", "chromium"]
+    else:
+        playwright_args = ["@playwright/mcp@latest", "--isolated"]
     return {
         "playwright": {
             "transport": "stdio",
             "command": "npx",
-            "args": ["@playwright/mcp@latest", "--isolated"],
+            "args": playwright_args,
         },
         "filesystem": {
             "transport": "stdio",
