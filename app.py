@@ -1,6 +1,7 @@
 """Gradio app for the Sidekick. Run with: uv run app.py"""
 
 import html
+import os
 
 import gradio as gr
 
@@ -100,4 +101,14 @@ with gr.Blocks(title="Sidekick") as ui:
 
 
 if __name__ == "__main__":
-    ui.launch(inbrowser=True, **LAUNCH_STYLE)
+    # On Render, PORT is set for you and the app must listen on 0.0.0.0.
+    # If APP_PASSWORD is set, the app asks for a login (username: admin).
+    password = os.environ.get("APP_PASSWORD")
+    on_render = "PORT" in os.environ
+    ui.launch(
+        server_name="0.0.0.0" if on_render else "127.0.0.1",
+        server_port=int(os.environ.get("PORT", 7860)),
+        inbrowser=not on_render,
+        auth=("admin", password) if password else None,
+        **LAUNCH_STYLE,
+    )
