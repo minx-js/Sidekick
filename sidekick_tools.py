@@ -21,7 +21,7 @@ ON_RENDER = "PORT" in os.environ
 # Wikimedia rejects the wikipedia library's default user agent, so identify ourselves properly
 wikipedia.set_user_agent("agentic-track-course (https://edwarddonner.com)")
 
-search = GoogleSerperRun(api_wrapper=GoogleSerperAPIWrapper())
+search = GoogleSerperRun(api_wrapper=GoogleSerperAPIWrapper()) if os.getenv("SERPER_API_KEY") else None
 
 wikipedia_lookup = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper())
 
@@ -106,5 +106,5 @@ async def get_all_tools(sandbox: str):
     """Return the full tool list (our tools plus the MCP server tools) and the session holder."""
     sessions = McpSessions(mcp_connections(sandbox))
     mcp_tools = await sessions.start()
-    our_tools = [search, send_push_notification, wikipedia_lookup, request_human_help]
+    our_tools = [t for t in [search, send_push_notification, wikipedia_lookup, request_human_help] if t is not None]
     return our_tools + mcp_tools, sessions
